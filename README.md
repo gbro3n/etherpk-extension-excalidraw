@@ -54,9 +54,9 @@ to show its text. Words written in a drawing aren't found by EtherPK's search ye
 
 ## Installing
 
-EtherPK can't install extensions from other publishers yet. The EtherPK Extension Directory, where
-they will be listed, is being built. Until then you can run this extension in a development copy of
-the EtherPK Client (below).
+Once it is listed in the EtherPK Extension Directory, install it in EtherPK from Settings and
+Extensions, then Extensions. It is not listed yet. Until it is, you can install it from a local
+directory, or side-load it in a development copy of the EtherPK Client (both below).
 
 ## Development
 
@@ -76,6 +76,15 @@ folder in `ETHERPK_DEV_EXTENSIONS`:
 ```bash
 # in the EtherPK checkout:
 ETHERPK_DEV_EXTENSIONS=/path/to/etherpk-extension-excalidraw pnpm dev:client
+```
+
+To install it the way a listed release is installed, build it and serve it from a local Extension
+Directory, with the EtherPK checkout's tool:
+
+```bash
+# in the EtherPK checkout:
+pnpm dev:extension-directory /path/to/etherpk-extension-excalidraw
+EXTENSION_DIRECTORY_URL=http://127.0.0.1:5399/directory.json EXTENSION_REGISTRY_URL=http://127.0.0.1:5399 pnpm dev:client
 ```
 
 The browser tests start their own Client from `ETHERPK_CLIENT_DIR` (`../etherpk` when unset) on

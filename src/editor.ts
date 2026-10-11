@@ -2,9 +2,11 @@
  * A live Excalidraw editor over one drawing, saving as the person draws (plan 2026-10-10 Community
  * Extensions, decision 27):
  *
- * - **What is written.** Only the lines of elements whose version changed, the deleted ones' lines
- *   removed and new ones added (`planWrite`), as one change (`context.edit` with a list), at most every
- *   half second while drawing and at once when a stroke ends.
+ * - **What is written.** Only the lines of elements whose version changed, the lines of those the
+ *   person deleted removed and new ones added (`planWrite`), as one change (`context.edit` with a
+ *   list), at most every half second while drawing and at once when a stroke ends. The scene is read
+ *   with its deleted elements, since a deletion is the only thing that removes a line: an element
+ *   Excalidraw never loaded keeps its line.
  * - **Changes from elsewhere** (another device, another view of the drawing) arrive as a new body.
  *   They are merged into what is on screen with the drawing as last read (`mergeDrawing`), without
  *   disturbing the stroke in progress, and anything newer here is written back on the next save.
@@ -19,6 +21,7 @@ import type { FenceContext } from '@appsoftwareltd/etherpk-extension-api'
 
 import { applyEdits, type DrawingHeader, type ElementRecord, mergeDrawing, newDrawingId, planWrite, readDrawing, sameBody } from './format'
 import type { ExcalidrawKit } from './load'
+import { restoreScene } from './scene'
 
 /** How long a run of changes waits before it is written, while the person is still drawing. */
 const SAVE_DELAY = 500
@@ -41,7 +44,7 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     let body: readonly string[] = context.body
     const read = readDrawing(body)
     let header: DrawingHeader = read.header ?? { type: 'excalidraw.drawing', version: 1, id: newDrawingId(), background: '#ffffff' }
-    type Api = { getSceneElements(): readonly unknown[]; getAppState(): { viewBackgroundColor: string }; updateScene(scene: unknown): void }
+    type Api = { getSceneElementsIncludingDeleted(): readonly unknown[]; getAppState(): { viewBackgroundColor: string }; updateScene(scene: unknown): void }
     let api: Api | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     /** A version stamp of what is on screen when it was last written, so an unchanged scene is not compared line by line. */
@@ -54,7 +57,7 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
         if (timer) clearTimeout(timer)
         timer = null
         if (!api || !context.writable) return
-        const elements = api.getSceneElements() as unknown as ElementRecord[]
+        const elements = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
         const background = api.getAppState().viewBackgroundColor
         const stamp = stampOf(elements, background)
         if (stamp === writtenStamp) return
@@ -85,7 +88,7 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
                 Excalidraw,
                 {
                     initialData: {
-                        elements: kit.excalidraw.restoreElements(read.elements as never, null),
+                        elements: restoreScene(kit, read.elements),
                         appState: { viewBackgroundColor: header.background ?? '#ffffff' },
                         scrollToContent: true,
                     },
@@ -123,11 +126,11 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
             if (sameBody(next.body, body) || !api) return
             // A change from elsewhere: merged with what is on screen, against the body as last read.
             const remote = readDrawing(next.body)
-            const local = api.getSceneElements() as unknown as ElementRecord[]
+            const local = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
             const merged = mergeDrawing(readDrawing(body).elements, local, remote.elements)
             body = next.body
             if (remote.header) header = remote.header
-            api.updateScene({ elements: kit.excalidraw.restoreElements(merged as never, null), captureUpdate: CaptureUpdateAction.NEVER })
+            api.updateScene({ elements: restoreScene(kit, merged), captureUpdate: CaptureUpdateAction.NEVER })
             // Whatever is newer here is written on the next save.
             writtenStamp = ''
             schedule()

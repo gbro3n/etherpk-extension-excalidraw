@@ -10,6 +10,8 @@
  * - Open in tab and Full window, where the Client draws the same widget bigger (the fence's
  *   `identify` lets the Client find the drawing again by its own id);
  * - `/drawing`, on a desktop, which puts a new drawing at the caret (`context.editor.insertBlock`);
+ * - pasted on a line of its own, an excalidraw.com share link becomes a drawing to import, and shapes
+ *   copied on excalidraw.com become a drawing of them (the fence's `fromPaste`, `share-link.ts`);
  * - on a published site, a picture of the drawing (the fence's `publish`).
  *
  * It mounts in the page rather than in a shadow root (`"isolation": "page"` in package.json), since
@@ -23,7 +25,8 @@ import type { ExtensionContext } from '@appsoftwareltd/etherpk-extension-api'
 
 import { DRAWING_FENCE, drawingAlt, identifyDrawing, newDrawingText, readDrawing } from './format'
 import { loadExcalidraw } from './load'
-import { createDrawingWidget } from './widget'
+import { pastedDrawing } from './share-link'
+import { createDrawingWidget, imagesLeftOut } from './widget'
 
 /** Where this bundle is served from: Excalidraw's fonts are copied under it, at `fonts/`. */
 const ASSET_BASE = new URL('./', import.meta.url).href
@@ -31,16 +34,26 @@ const ASSET_BASE = new URL('./', import.meta.url).href
 export const INSERT_COMMAND = 'excalidraw.insert'
 
 export function activate(context: ExtensionContext): void {
-    context.editor.registerFence(DRAWING_FENCE, createDrawingWidget({ assetBase: ASSET_BASE, isDesktop: () => context.layout.isDesktop() }), {
+    const widget = createDrawingWidget({ assetBase: ASSET_BASE, isDesktop: () => context.layout.isDesktop(), notify: (message) => context.notify(message) })
+    context.editor.registerFence(DRAWING_FENCE, widget, {
         title: 'Drawing',
         keepsHistory: true,
         identify: identifyDrawing,
+        fromPaste(text) {
+            const pasted = pastedDrawing(text)
+            if (!pasted) return null
+            if (pasted.skippedImages > 0) context.notify(imagesLeftOut(pasted.skippedImages, 'pasted'))
+            return pasted.lines
+        },
         async publish(fence) {
             const drawing = readDrawing(fence.body)
-            if (drawing.elements.length === 0) return null
-            const { drawingFile } = await import('./picture')
-            const file = await drawingFile(await loadExcalidraw(ASSET_BASE), drawing)
-            return { kind: 'picture', type: 'image/svg+xml', bytes: file.bytes, width: file.width, height: file.height, alt: drawingAlt(drawing.elements) }
+            if (drawing.elements.length === 0 && drawing.skeletons.length === 0) return null
+            const [{ drawingFile }, { convertSkeletons }] = await Promise.all([import('./picture'), import('./scene')])
+            const kit = await loadExcalidraw(ASSET_BASE)
+            // Shapes written by hand are drawn too, converted as the document would convert them.
+            const elements = [...drawing.elements, ...convertSkeletons(kit, drawing.skeletons).elements]
+            const file = await drawingFile(kit, { header: drawing.header, elements })
+            return { kind: 'picture', type: 'image/svg+xml', bytes: file.bytes, width: file.width, height: file.height, alt: drawingAlt(elements) }
         },
     })
 

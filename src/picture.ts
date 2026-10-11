@@ -5,16 +5,17 @@
  */
 import type { Drawing } from './format'
 import type { ExcalidrawKit } from './load'
+import { restoreScene } from './scene'
 
 /** Kept pictures, by what they show, so a drawing scrolled back into view is not exported again. */
 const kept = new Map<string, Promise<SVGSVGElement>>()
 const KEEP = 24
 
-export function drawingSvg(kit: ExcalidrawKit, drawing: Drawing, options: { dark: boolean }): Promise<SVGSVGElement> {
+export function drawingSvg(kit: ExcalidrawKit, drawing: Pick<Drawing, 'header' | 'elements'>, options: { dark: boolean }): Promise<SVGSVGElement> {
     const key = `${options.dark ? 'dark' : 'light'}\n${drawing.header?.background ?? ''}\n${JSON.stringify(drawing.elements)}`
     let picture: Promise<SVGSVGElement> | undefined = kept.get(key)
     if (!picture) {
-        const elements = kit.excalidraw.restoreElements(drawing.elements as never, null)
+        const elements = restoreScene(kit, drawing.elements)
         const exported: Promise<SVGSVGElement> = kit.excalidraw.exportToSvg({
             elements: elements as never,
             appState: {
@@ -36,7 +37,7 @@ export function drawingSvg(kit: ExcalidrawKit, drawing: Drawing, options: { dark
 }
 
 /** The picture as a file for a published site: its bytes, size and type. */
-export async function drawingFile(kit: ExcalidrawKit, drawing: Drawing): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+export async function drawingFile(kit: ExcalidrawKit, drawing: Pick<Drawing, 'header' | 'elements'>): Promise<{ bytes: Uint8Array; width: number; height: number }> {
     const svg = await drawingSvg(kit, drawing, { dark: false })
     const width = Math.round(Number.parseFloat(svg.getAttribute('width') ?? '0')) || 640
     const height = Math.round(Number.parseFloat(svg.getAttribute('height') ?? '0')) || 360

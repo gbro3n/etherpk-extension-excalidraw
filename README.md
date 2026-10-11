@@ -15,6 +15,15 @@ the Excalidraw team.
 - **Open in tab** opens the drawing in a tab of its own, with more room.
 - **Full window** fills the EtherPK window with the drawing. Press Return to go back. Esc stays with
   Excalidraw, which uses it to leave a tool.
+- **Edit as text and Delete** are in the menu at the top right of a drawing's picture (the `…`
+  button), and in the bar above a drawing you are drawing on. Edit as text shows the drawing's lines
+  in the document. Delete removes the drawing at once. Press Mod+Z in the document to bring it back.
+- **Bring a drawing from excalidraw.com.** Paste a share link
+  (`https://excalidraw.com/#json=…`) on an empty line, and press **Import this drawing from
+  excalidraw.com** on the card that appears. Nothing is fetched from excalidraw.com until you press
+  it. The drawing then lives in your document, and the link and its key are gone from it. You can
+  also copy shapes on excalidraw.com and paste them on an empty line. Images aren't brought across,
+  since a drawing in EtherPK holds none.
 - **Phones and tablets under 1024 pixels wide** show drawings as pictures. Tap one to see it bigger.
   Drawing is for a desktop.
 - **Published sites.** On a site you publish from EtherPK, a drawing is a picture of it, an SVG file
@@ -39,6 +48,29 @@ after it is one Excalidraw element, as Excalidraw writes it:
 
 Because each element is a line of its own, a change saves only the lines of the elements that
 changed, and two devices drawing at once merge element by element.
+
+A save never removes what it didn't load. A line is removed only when you delete that element.
+Lines the extension can't read stay as they are: broken JSON, a note in words, or a shape this
+Excalidraw doesn't know, such as one made with a newer Excalidraw.
+
+### Writing shapes by hand
+
+A shape can also be written without Excalidraw's bookkeeping, in Excalidraw's own
+[skeleton form](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/excalidraw-element-skeleton):
+a `type`, a position and a size, and no `version`. A label inside a shape, and an arrow joining two
+shapes by their ids, are written the same way:
+
+````markdown
+```excalidraw.drawing
+{"type":"excalidraw.drawing","version":1,"id":"k3v9q2m8xa","background":"#ffffff"}
+{"id":"beds","type":"rectangle","x":0,"y":0,"width":160,"height":80,"label":{"text":"Beds"}}
+{"id":"shed","type":"ellipse","x":300,"y":0,"width":120,"height":80,"label":{"text":"Shed"}}
+{"type":"arrow","x":160,"y":40,"start":{"id":"beds"},"end":{"id":"shed"}}
+```
+````
+
+When the drawing is next shown, the extension draws these shapes and writes them back as full
+Excalidraw elements in their place. Two devices doing so at once write the same elements.
 
 EtherPK treats a block named `<extension id>.<name>` as an Extension Fence: it never searches it,
 never shows its lines unless you ask (Edit as text), and never publishes it as code. Without this
@@ -65,7 +97,7 @@ You need Node 24 and pnpm, and a checkout of the EtherPK repository beside this 
 ```bash
 pnpm install
 pnpm build          # dist/: main.js, main.css, Excalidraw's code in chunks/, its fonts in fonts/
-pnpm test           # unit tests (the drawing format, merging and saving)
+pnpm test           # unit tests (the drawing format, merging, saving and share links)
 pnpm check          # type check
 pnpm test:e2e       # browser tests, against a Client that loads this extension
 ```
@@ -111,8 +143,8 @@ Excalidraw release that moves it fails the build rather than shipping without th
 
 The extension is written against
 [`@appsoftwareltd/etherpk-extension-api`](https://www.npmjs.com/package/@appsoftwareltd/etherpk-extension-api).
-It uses `context.editor.registerFence` (the widget, the tab and full window, the published picture),
-`context.editor.insertBlock` and `context.layout.isDesktop`.
+It uses `context.editor.registerFence` (the widget, the tab and full window, pasting, the published
+picture), `context.editor.insertBlock`, `context.layout.isDesktop` and `context.notify`.
 
 ## Licence
 

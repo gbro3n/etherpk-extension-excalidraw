@@ -105,6 +105,176 @@
     outline-offset: 2px;
 }
 
+.excalidraw-drawing-action--primary {
+    border-color: var(--gk-accent, #2563eb);
+    background: var(--gk-accent, #2563eb);
+    color: var(--gk-surface-0, #fff);
+}
+
+.excalidraw-drawing-action--primary:hover {
+    background: var(--gk-accent-hover, #1d4ed8);
+}
+
+.excalidraw-drawing-action--primary[aria-busy='true'] {
+    cursor: progress;
+}
+
+.excalidraw-drawing-action--danger {
+    color: var(--gk-text-danger, #b91c1c);
+}
+
+/* Edit as text and Delete, apart from the buttons that move the drawing. */
+.excalidraw-drawing-toolbar-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+/*
+ * The picture's menu: in its top right corner, shown while the pointer is over the drawing or the
+ * keyboard is in it, and always where there is no hover (a touch screen).
+ */
+.excalidraw-drawing-menu {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+}
+
+.excalidraw-drawing:hover .excalidraw-drawing-menu,
+.excalidraw-drawing:focus-within .excalidraw-drawing-menu,
+.excalidraw-drawing-menu:has([aria-expanded='true']) {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .excalidraw-drawing-menu {
+        opacity: 1;
+    }
+}
+
+.excalidraw-drawing-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--gk-border-soft, #e5e7eb);
+    border-radius: 0.375rem;
+    background: var(--gk-surface-0, #fff);
+    color: var(--gk-text-muted, #6b7280);
+    cursor: pointer;
+}
+
+.excalidraw-drawing-menu-button:hover,
+.excalidraw-drawing-menu-button[aria-expanded='true'] {
+    color: var(--gk-text-default, inherit);
+    background: var(--gk-surface-1, #f3f4f6);
+}
+
+.excalidraw-drawing-menu-button:focus-visible,
+.excalidraw-drawing-menu-item:focus-visible {
+    outline: 2px solid var(--gk-accent, #2563eb);
+    outline-offset: 2px;
+}
+
+.excalidraw-drawing-menu-icon {
+    width: 1rem;
+    height: 1rem;
+    fill: currentColor;
+}
+
+/* Beside its button rather than below it: the Client clips a drawing to its height, and the smallest
+   picture is just tall enough for the menu this way. */
+.excalidraw-drawing-menu-list {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 0.25rem);
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+    padding: 0.25rem;
+    border: 1px solid var(--gk-border-soft, #e5e7eb);
+    border-radius: 0.5rem;
+    background: var(--gk-surface-0, #fff);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.excalidraw-drawing-menu-list[hidden] {
+    display: none;
+}
+
+.excalidraw-drawing-menu-item {
+    padding: 0.375rem 0.625rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--gk-text-default, inherit);
+    font: inherit;
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.excalidraw-drawing-menu-item:hover,
+.excalidraw-drawing-menu-item:focus {
+    background: var(--gk-surface-1, #f3f4f6);
+}
+
+/* A share link from excalidraw.com, not yet imported. */
+.excalidraw-drawing-import {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem 3rem 0.75rem 1rem;
+    border: 1px dashed var(--gk-border-strong, #9ca3af);
+    border-radius: 0.5rem;
+}
+
+.excalidraw-drawing-import-title {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--gk-text-default, inherit);
+}
+
+.excalidraw-drawing-import-note {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--gk-text-muted, #6b7280);
+}
+
+.excalidraw-drawing-import-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.excalidraw-drawing-import-link {
+    font-size: 0.875rem;
+    color: var(--gk-accent, #2563eb);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.excalidraw-drawing-import-link:focus-visible {
+    outline: 2px solid var(--gk-accent, #2563eb);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .excalidraw-drawing-menu {
+        transition: none;
+    }
+}
+
 .excalidraw-drawing-editor {
     position: relative;
     flex: 1 1 auto;

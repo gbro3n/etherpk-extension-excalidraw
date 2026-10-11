@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { deflateSync } from 'node:zlib'
 
 import { expect, type Locator, type Page, test } from '@playwright/test'
 import { strFromU8, unzipSync } from 'fflate'
@@ -52,6 +53,52 @@ function getDoc(page: Page): Promise<string> {
 async function caretAt(page: Page, position: number) {
     await page.getByTestId('document-editor').locator('.cm-content').click()
     await page.evaluate((at) => (window as unknown as { __setCaret(at: number): void }).__setCaret(at), position)
+}
+
+async function paste(page: Page, text: string) {
+    await page.getByTestId('document-editor').locator('.cm-content').evaluate((element, value) => {
+        const data = new DataTransfer()
+        data.setData('text/plain', value)
+        element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    }, text)
+}
+
+/** The Client's notices, which the harness writes to the console rather than drawing. */
+function notices(page: Page): string[] {
+    const said: string[] = []
+    page.on('console', (message) => said.push(message.text()))
+    return said
+}
+
+/** The lines of the document's drawing, between its fences. */
+async function drawingLines(page: Page): Promise<string[]> {
+    const text = await getDoc(page)
+    const start = text.indexOf('```excalidraw.drawing\n')
+    if (start < 0) return []
+    const body = text.slice(start + '```excalidraw.drawing\n'.length)
+    return body.slice(0, body.indexOf('\n```')).split('\n')
+}
+
+/** A scene encrypted and joined as excalidraw.com stores a shared drawing, with the key its link carries. */
+async function sharedScene(scene: unknown): Promise<{ bytes: Buffer; key: string }> {
+    const join = (...buffers: Uint8Array[]) => {
+        const out = new Uint8Array(4 + buffers.reduce((sum, buffer) => sum + 4 + buffer.byteLength, 0))
+        const view = new DataView(out.buffer)
+        view.setUint32(0, 1)
+        let at = 4
+        for (const buffer of buffers) {
+            view.setUint32(at, buffer.byteLength)
+            out.set(buffer, at + 4)
+            at += 4 + buffer.byteLength
+        }
+        return out
+    }
+    const utf8 = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 128 }, true, ['encrypt'])
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, deflateSync(join(utf8(null), utf8(scene)))))
+    const bytes = join(utf8({ version: 2, compression: 'pako@1', encryption: 'AES-GCM' }), iv, encrypted)
+    return { bytes: Buffer.from(bytes), key: (await crypto.subtle.exportKey('jwk', key)).k! }
 }
 
 /**
@@ -132,6 +179,143 @@ test.describe('a drawing in a document', () => {
         await page.getByText('After').click()
         await expect(page.getByTestId('excalidraw-picture')).toBeVisible()
         await expect(page.getByTestId('excalidraw-editor')).toHaveCount(0)
+    })
+
+    test("the picture's menu shows the drawing as text, from the keyboard too", async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await expect(page.getByTestId('excalidraw-picture').locator('svg[role="img"]')).toBeVisible({ timeout: 30_000 })
+        const menu = page.getByTestId('excalidraw-menu')
+        await menu.focus()
+        await page.keyboard.press('Enter')
+        await expect(page.getByRole('menuitem', { name: 'Edit as text' })).toBeFocused()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menu')).toBeHidden()
+        await expect(menu).toBeFocused()
+
+        await menu.click()
+        await page.getByRole('menuitem', { name: 'Edit as text' }).click()
+        await expect(page.locator('.cm-line', { hasText: '"type":"rectangle"' })).toBeVisible()
+    })
+
+    test('Delete in the menu removes the drawing at once, says how to undo it, and Mod+Z brings it back', async ({ page }) => {
+        const said = notices(page)
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-menu').click()
+        await page.getByRole('menuitem', { name: 'Delete' }).click()
+        await expect.poll(() => getDoc(page)).toBe('Garden\nAfter')
+        await expect.poll(() => said).toContain('Drawing deleted. Press Ctrl+Z (Cmd+Z on a Mac) in the document to bring it back.')
+
+        await page.getByTestId('document-editor').locator('.cm-content').focus()
+        await page.keyboard.press('Control+z')
+        await expect.poll(() => getDoc(page)).toBe(['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+    })
+
+    test('Edit as text and Delete are in the live toolbar too, and what was drawn is saved first', async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        await drawRectangle(page, page.getByTestId('document-editor'))
+        await page.getByTestId('excalidraw-edit-text').click()
+        await expect(page.getByTestId('excalidraw-editor')).toHaveCount(0)
+        await expect.poll(async () => (await drawingLines(page)).filter((line) => line.includes('"type":"rectangle"')).length).toBe(2)
+        await expect(page.locator('.cm-line', { hasText: '"id":"r1"' })).toBeVisible()
+
+        await page.getByText('After').click()
+        await page.getByTestId('excalidraw-picture').click()
+        await expect(page.getByTestId('excalidraw-editor').locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await page.getByTestId('excalidraw-delete').click()
+        await expect.poll(() => getDoc(page)).toBe('Garden\nAfter')
+    })
+
+    test('a save keeps every line Excalidraw could not load, and every line it could not read', async ({ page }) => {
+        // A shape type newer than this Excalidraw, and a line someone broke while editing the text.
+        const sticky = JSON.stringify({ id: 'n1', type: 'stickynote', version: 1, versionNonce: 3, x: 300, y: 0, width: 100, height: 100 })
+        const broken = '{"id":"r9","type":"rect'
+        await setDoc(page, ['Garden', drawing('k1', rectangle, sticky, broken), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        await drawRectangle(page, page.getByTestId('document-editor'))
+        await expect.poll(async () => (await drawingLines(page)).filter((line) => line.includes('"type":"rectangle"')).length, { timeout: 10_000 }).toBe(2)
+        await page.getByTestId('excalidraw-done').click()
+        const lines = await drawingLines(page)
+        expect(lines).toContain(sticky)
+        expect(lines).toContain(broken)
+    })
+
+    test('an excalidraw.com share link pasted on an empty line is a drawing to import, fetched only when asked', async ({ page }) => {
+        const shared = { type: 'excalidraw', elements: [JSON.parse(rectangle), JSON.parse(label), { id: 'i1', type: 'image', version: 1, versionNonce: 4, x: 0, y: 0, width: 10, height: 10, fileId: 'f1' }], appState: { viewBackgroundColor: '#fdf6e3' } }
+        const { bytes, key } = await sharedScene(shared)
+        const asked: string[] = []
+        await page.route('https://json.excalidraw.com/api/v2/**', (route) => {
+            asked.push(route.request().url())
+            return route.fulfill({ body: bytes, contentType: 'application/octet-stream', headers: { 'access-control-allow-origin': '*' } })
+        })
+        const said = notices(page)
+        const link = `https://excalidraw.com/#json=AbC123_-xyz,${key}`
+        await setDoc(page, 'Garden\n\nAfter')
+        await caretAt(page, 'Garden\n'.length)
+        await paste(page, link)
+        await expect.poll(() => drawingLines(page)).toEqual([expect.stringMatching(/^\{"type":"excalidraw\.drawing"/), link])
+        const card = page.getByTestId('excalidraw-import')
+        await expect(card).toContainText('A drawing shared from excalidraw.com')
+        expect(asked).toEqual([])
+
+        await card.getByRole('button', { name: 'Import this drawing from excalidraw.com' }).click()
+        await expect(page.getByRole('img', { name: 'Drawing: Beans' })).toBeVisible({ timeout: 30_000 })
+        expect(asked).toEqual(['https://json.excalidraw.com/api/v2/AbC123_-xyz'])
+        const lines = await drawingLines(page)
+        expect(lines).not.toContain(link)
+        expect(lines[0]).toContain('"background":"#fdf6e3"')
+        expect(lines.slice(1)).toEqual([rectangle, label])
+        await expect.poll(() => said).toContain('The drawing was imported without its image. Drawings in EtherPK hold no images.')
+    })
+
+    test('an import that fails says why, keeps the link, and can be tried again', async ({ page }) => {
+        let up = false
+        const { bytes, key } = await sharedScene({ elements: [JSON.parse(rectangle)] })
+        await page.route('https://json.excalidraw.com/api/v2/**', (route) =>
+            up ? route.fulfill({ body: bytes, headers: { 'access-control-allow-origin': '*' } }) : route.fulfill({ status: 404, body: 'missing', headers: { 'access-control-allow-origin': '*' } }),
+        )
+        const link = `https://excalidraw.com/#json=AbC123_-xyz,${key}`
+        await setDoc(page, ['Garden', '```excalidraw.drawing', header('k1'), link, '```', 'After'].join('\n'))
+        const card = page.getByTestId('excalidraw-import')
+        await card.getByRole('button', { name: 'Import this drawing from excalidraw.com' }).click()
+        await expect(card.getByRole('status')).toHaveText('excalidraw.com no longer has this drawing.')
+        expect(await drawingLines(page)).toContain(link)
+
+        up = true
+        await card.getByRole('button', { name: 'Import this drawing from excalidraw.com' }).click()
+        await expect(page.getByTestId('excalidraw-picture').locator('svg[role="img"]')).toBeVisible({ timeout: 30_000 })
+    })
+
+    test('shapes copied on excalidraw.com and pasted on an empty line become a drawing of them', async ({ page }) => {
+        await setDoc(page, 'Garden\n\nAfter')
+        await caretAt(page, 'Garden\n'.length)
+        await paste(page, JSON.stringify({ type: 'excalidraw/clipboard', elements: [JSON.parse(rectangle), JSON.parse(label)], files: {} }))
+        await expect.poll(async () => (await drawingLines(page)).slice(1)).toEqual([rectangle, label])
+        await expect(page.getByRole('img', { name: 'Drawing: Beans' })).toBeVisible({ timeout: 30_000 })
+    })
+
+    test('shapes written by hand, without their version, are drawn and written back as full elements', async ({ page }) => {
+        const box = JSON.stringify({ type: 'rectangle', x: 0, y: 0, width: 160, height: 80, label: { text: 'Beds' } })
+        await setDoc(page, ['Garden', drawing('k1', box), 'After'].join('\n'))
+        await expect(page.getByRole('img', { name: 'Drawing: Beds' })).toBeVisible({ timeout: 30_000 })
+        await expect
+            .poll(async () => (await drawingLines(page)).slice(1).map((line) => JSON.parse(line) as { type: string; version?: number }))
+            .toEqual([expect.objectContaining({ type: 'rectangle', version: expect.any(Number) }), expect.objectContaining({ type: 'text', text: 'Beds', version: expect.any(Number) })])
+    })
+
+    test("the README's hand-written example converts, its arrow joined to both shapes", async ({ page }) => {
+        const shapes = [
+            '{"id":"beds","type":"rectangle","x":0,"y":0,"width":160,"height":80,"label":{"text":"Beds"}}',
+            '{"id":"shed","type":"ellipse","x":300,"y":0,"width":120,"height":80,"label":{"text":"Shed"}}',
+            '{"type":"arrow","x":160,"y":40,"start":{"id":"beds"},"end":{"id":"shed"}}',
+        ]
+        await setDoc(page, ['Garden', drawing('k1', ...shapes), 'After'].join('\n'))
+        await expect(page.getByRole('img', { name: 'Drawing: Beds, Shed' })).toBeVisible({ timeout: 30_000 })
+        type Written = { id: string; type: string; version?: number; startBinding?: { elementId: string }; endBinding?: { elementId: string } }
+        await expect.poll(async () => (await drawingLines(page)).slice(1).every((line) => typeof (JSON.parse(line) as Written).version === 'number')).toBe(true)
+        const written = (await drawingLines(page)).slice(1).map((line) => JSON.parse(line) as Written)
+        expect(written.find((element) => element.type === 'arrow')).toMatchObject({ startBinding: { elementId: 'beds' }, endBinding: { elementId: 'shed' } })
+        expect(written.map((element) => element.type).sort()).toEqual(['arrow', 'ellipse', 'rectangle', 'text', 'text'])
     })
 })
 

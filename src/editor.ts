@@ -1,6 +1,5 @@
 /**
- * A live Excalidraw editor over one drawing, saving as the person draws (plan 2026-10-10 Community
- * Extensions, decision 27):
+ * A live Excalidraw editor over one drawing, saving as the person draws:
  *
  * - **What is written.** Only the lines of elements whose version changed, the lines of those the
  *   person deleted removed and new ones added (`planWrite`), as one change (`context.edit` with a

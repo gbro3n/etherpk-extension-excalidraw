@@ -1,6 +1,6 @@
 /**
  * A PostCSS plugin that scopes every style rule under an `excalidraw` class, as the EtherPK Client
- * requires of an extension mounted in the page (ADR 0121, amended 2026-10-10). A rule that already
+ * requires of an extension mounted in the page (`"isolation": "page"`). A rule that already
  * styles an element with a class starting with `excalidraw`, or one inside it, is left alone. Any
  * other gets `.excalidraw` put before the element it styles, after any `:root[...]` condition:
  * `.zoom-actions` becomes `.excalidraw .zoom-actions`, and `:root[dir=rtl] .zoom-out-button` becomes

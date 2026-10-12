@@ -17,7 +17,7 @@
         "id": "excalidraw",
         "displayName": "Excalidraw",
         "publisher": "gbro3n",
-        "minClientVersion": "0.9.5",
+        "minClientVersion": "0.10.0",
         "main": "./dist/main.js",
         "styles": [
             "./dist/main.css"
@@ -28,6 +28,7 @@
         }
     },
     "scripts": {
+        "prepublishOnly": "pnpm run build",
         "build": "vite build && node scripts/copy-fonts.mjs",
         "check": "tsc --noEmit",
         "test": "vitest run",
@@ -39,7 +40,7 @@
         "react-dom": "19.2.0"
     },
     "devDependencies": {
-        "@appsoftwareltd/etherpk-extension-api": "link:../etherpk-worktrees/community-extensions/packages/extension-api",
+        "@appsoftwareltd/etherpk-extension-api": "^0.10.0",
         "@playwright/test": "^1.64.0",
         "@types/node": "^25.9.9",
         "@types/react": "^19.2.0",

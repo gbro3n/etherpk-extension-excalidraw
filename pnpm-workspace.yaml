@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@appsoftwareltd/etherpk-extension-api@0.10.0'

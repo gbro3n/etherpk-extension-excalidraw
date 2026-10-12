@@ -86,9 +86,10 @@ to show its text. Words written in a drawing aren't found by EtherPK's search ye
 
 ## Installing
 
-Once it is listed in the EtherPK Extension Directory, install it in EtherPK from Settings and
-Extensions, then Extensions. It is not listed yet. Until it is, you can install it from a local
-directory, or side-load it in a development copy of the EtherPK Client (both below).
+It is listed in the EtherPK Extension Directory. Install it in EtherPK from Settings and
+Extensions, then Extensions. It needs EtherPK 0.10.0 or later. To try a change before it is
+released, install it from a local directory, or side-load it in a development copy of the EtherPK
+Client (both below).
 
 ## Development
 

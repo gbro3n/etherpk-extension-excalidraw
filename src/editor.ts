@@ -7,8 +7,13 @@
  *   with its deleted elements, since a deletion is the only thing that removes a line: an element
  *   Excalidraw never loaded keeps its line.
  * - **Changes from elsewhere** (another device, another view of the drawing) arrive as a new body.
- *   They are merged into what is on screen with the drawing as last read (`mergeDrawing`), without
- *   disturbing the stroke in progress, and anything newer here is written back on the next save.
+ *   They are merged into what is on screen with the drawing as last read (`mergeDrawing`), and
+ *   anything newer here is written back on the next save.
+ * - **Text being typed, and a shape being drawn,** are Excalidraw's alone until they are finished:
+ *   nothing is saved while text is typed, and a change from elsewhere waits for the edit to end.
+ *   Excalidraw types into the element it holds, so a scene replaced under it (`updateScene` puts
+ *   new copies of every element) left the typing going to an element no longer drawn: its box stayed
+ *   at its first measure, cutting off the letters, and the text was dropped when it was finished.
  * - **Undo.** Mod+Z and Mod+Y are Excalidraw's own while it has the keyboard: its fence is registered
  *   with `keepsHistory`.
  *
@@ -45,7 +50,7 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     let header: DrawingHeader = read.header ?? { type: 'excalidraw.drawing', version: 1, id: newDrawingId(), background: '#ffffff' }
     type Api = {
         getSceneElementsIncludingDeleted(): readonly unknown[]
-        getAppState(): { viewBackgroundColor: string; editingTextElement?: { id: string } | null; newElement?: { id: string } | null }
+        getAppState(): { viewBackgroundColor: string; editingTextElement?: unknown; newElement?: unknown }
         updateScene(scene: unknown): void
     }
     let api: Api | null = null
@@ -53,13 +58,24 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     /** A version stamp of what is on screen when it was last written, so an unchanged scene is not compared line by line. */
     let writtenStamp = ''
     let destroyed = false
+    /** A change from elsewhere arrived while something was in hand: merged once the edit ends. */
+    let waiting = false
 
     const stampOf = (elements: readonly unknown[], background: string) => `${background}:${(elements as { id: string; version: number }[]).map((e) => `${e.id}.${e.version}`).join(',')}`
 
-    function flush(): void {
+    /** Whether Excalidraw is typing text or drawing a shape, which it alone may change until it ends. */
+    function inHand(): boolean {
+        const state = api?.getAppState()
+        return Boolean(state?.editingTextElement || state?.newElement)
+    }
+
+    /** Write what changed. While text is typed, nothing is, unless `force` (the editor is closing). */
+    function flush(force = false): void {
         if (timer) clearTimeout(timer)
         timer = null
         if (!api || !context.writable) return
+        // Finishing the text changes the scene, and that change is saved.
+        if (!force && api.getAppState().editingTextElement) return
         const elements = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
         const background = api.getAppState().viewBackgroundColor
         const stamp = stampOf(elements, background)
@@ -81,7 +97,7 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     const schedule = () => {
         if (destroyed || !context.writable) return
         if (timer) clearTimeout(timer)
-        timer = setTimeout(flush, SAVE_DELAY)
+        timer = setTimeout(() => flush(), SAVE_DELAY)
     }
 
     const root = kit.createRoot(element, { identifierPrefix: `etherpk-excalidraw-${++instances}` })
@@ -102,9 +118,15 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
                     viewModeEnabled: !context.writable,
                     autoFocus: options.autoFocus,
                     handleKeyboardGlobally: false,
-                    onChange: () => schedule(),
+                    onChange: () => {
+                        if (waiting && !inHand()) {
+                            waiting = false
+                            mergeFromDocument()
+                        }
+                        schedule()
+                    },
                     // A stroke ended: written at once, so a closed tab never loses it.
-                    onPointerUp: () => queueMicrotask(flush),
+                    onPointerUp: () => queueMicrotask(() => flush()),
                     UIOptions: {
                         canvasActions: { loadScene: false, saveToActiveFile: false, saveAsImage: false, export: false, toggleTheme: false, changeViewBackgroundColor: true, clearCanvas: true },
                         tools: { image: false },
@@ -121,29 +143,36 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     }
     render()
 
+    /** The document's body, changed elsewhere: merged with what is on screen, against the body as last read. */
+    function mergeFromDocument(): void {
+        if (!api || sameBody(context.body, body)) return
+        const remote = readDrawing(context.body)
+        const local = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
+        const merged = mergeDrawing(readDrawing(body).elements, local, remote.elements)
+        body = context.body
+        if (remote.header) header = remote.header
+        api.updateScene({ elements: restoreScene(kit, merged), captureUpdate: CaptureUpdateAction.NEVER })
+        // Whatever is newer here is written on the next save.
+        writtenStamp = ''
+        schedule()
+    }
+
     return {
         update(next) {
             const themeChanged = next.dark !== context.dark || next.writable !== context.writable
             context = next
             if (themeChanged) render()
             if (sameBody(next.body, body) || !api) return
-            // A change from elsewhere: merged with what is on screen, against the body as last read.
-            const remote = readDrawing(next.body)
-            const local = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
-            // The text being typed and the shape being drawn stay as they are here (mergeDrawing).
-            const state = api.getAppState()
-            const inHand = new Set([state.editingTextElement?.id, state.newElement?.id].filter((id): id is string => typeof id === 'string'))
-            const merged = mergeDrawing(readDrawing(body).elements, local, remote.elements, inHand)
-            body = next.body
-            if (remote.header) header = remote.header
-            api.updateScene({ elements: restoreScene(kit, merged), captureUpdate: CaptureUpdateAction.NEVER })
-            // Whatever is newer here is written on the next save.
-            writtenStamp = ''
-            schedule()
+            // Not under the text being typed or the shape being drawn: once the edit ends (onChange).
+            if (inHand()) {
+                waiting = true
+                return
+            }
+            mergeFromDocument()
         },
-        flush,
+        flush: () => flush(),
         destroy() {
-            flush()
+            flush(true)
             destroyed = true
             if (timer) clearTimeout(timer)
             // Unmounted after the widget's element left: React must not unmount inside the editor's own update.

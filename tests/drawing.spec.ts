@@ -172,28 +172,30 @@ test.describe('a drawing in a document', () => {
         await expect.poll(() => getDoc(page)).toBe(['Garden', drawing('k1', rectangle, label), 'xAfter'].join('\n'))
     })
 
-    test('text typed across a save keeps its editing box, and is saved whole', async ({ page }) => {
+    test('text typed with a pause shows whole as it is typed, from its first letter, and is saved whole', async ({ page }) => {
         await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
         await page.getByTestId('excalidraw-picture').click()
         const editor = page.getByTestId('excalidraw-editor')
         await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
         await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
         const canvas = (await editor.boundingBox())!
+        /** Whether the editing box holds all its text, rather than cutting it off at its edge. */
+        const whole = (box: Locator) => box.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)
 
-        // The text tool, on empty canvas beside the rectangle.
-        await page.keyboard.press('t')
+        // The text tool from Excalidraw's toolbar, as a person picks it, on empty canvas.
+        await editor.locator('.ToolIcon[title*="Text"]').first().click()
         await page.mouse.click(canvas.x + canvas.width / 2 + 180, canvas.y + canvas.height / 2)
         const box = editor.locator('textarea.excalidraw-wysiwyg')
         await expect(box).toBeFocused()
-        await page.keyboard.type('Bean')
-        // A save lands while the text is still being typed: the drawing writes it, and the
-        // document's change comes back to the widget.
-        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Bean"/)
-        await page.keyboard.type('stalk')
+        await page.keyboard.type('B')
+        // Longer than the drawing waits before it saves.
+        await page.waitForTimeout(800)
+        await expect(box).toHaveValue('B')
+        expect(await whole(box)).toBe(true)
+        await page.keyboard.type('eanstalk')
 
         await expect(box).toHaveValue('Beanstalk')
-        // The box grows with its text rather than closing to a sliver.
-        expect((await box.boundingBox())!.width).toBeGreaterThan(40)
+        expect(await whole(box)).toBe(true)
         await page.keyboard.press('Escape')
         await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Beanstalk"/)
     })
@@ -286,9 +288,8 @@ test.describe('a drawing in a document', () => {
         expect((JSON.parse(label) as { width: number }).width).toBeGreaterThan(20)
     })
 
-    test('text being typed survives an older copy of the drawing arriving, and is saved whole', async ({ page }) => {
-        const before = ['Garden', drawing('k1', rectangle), 'After'].join('\n')
-        await setDoc(page, before)
+    test('a change from elsewhere while text is typed waits for the text to be finished, and both are kept', async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
         await page.getByTestId('excalidraw-picture').click()
         const editor = page.getByTestId('excalidraw-editor')
         await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
@@ -300,16 +301,17 @@ test.describe('a drawing in a document', () => {
         const box = editor.locator('textarea.excalidraw-wysiwyg')
         await expect(box).toBeFocused()
         await page.keyboard.type('Bean')
-        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Bean"/)
-        // The drawing as it was before that save, arriving late: an echo of an older write.
-        await page.evaluate((value) => (window as unknown as { __setDoc(text: string): void }).__setDoc(value), before)
+        // Another device adds a shape meanwhile.
+        const shape = JSON.stringify({ id: 'e2', type: 'ellipse', version: 1, versionNonce: 3, x: 200, y: 0, width: 60, height: 60 })
+        await setDoc(page, ['Garden', drawing('k1', rectangle, shape), 'After'].join('\n'))
         await expect(box).toBeFocused()
         await page.keyboard.type('stalk')
 
         await expect(box).toHaveValue('Beanstalk')
-        expect((await box.boundingBox())!.width).toBeGreaterThan(40)
+        expect(await box.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
         await page.keyboard.press('Escape')
         await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Beanstalk"/)
+        expect(await getDoc(page)).toContain('"id":"e2"')
     })
 
     test('a press on the picture makes it live, and a press outside puts it back', async ({ page }) => {
@@ -534,7 +536,7 @@ test.describe('a drawing in a graph', () => {
         expect(lit).toBeGreaterThan(200)
     })
 
-    test('text typed in its tab across a save keeps its editing box, and reaches the file whole', async ({ page }) => {
+    test('text typed in its tab with a pause keeps its editing box, and reaches the file whole', async ({ page }) => {
         await openGraph(page, 'drawing-tab-text', { Plans: PLANS, 'Garden Site': SITE }, 'Plans')
         const inDocument = page.locator('[data-doc-target="Plans"]')
         await inDocument.getByTestId('excalidraw-picture').click()
@@ -555,8 +557,8 @@ test.describe('a drawing in a graph', () => {
         const box = editor.locator('textarea.excalidraw-wysiwyg')
         await expect(box).toBeFocused()
         await page.keyboard.type('Bean')
-        // A save reaches the file while the text is still being typed, and comes back to the tab.
-        await expect.poll(fileText, { timeout: 15_000 }).toMatch(/"text":"Bean"/)
+        // Longer than the drawing waits before it saves.
+        await page.waitForTimeout(800)
         await page.keyboard.type('stalk')
 
         await expect(box).toHaveValue('Beanstalk')

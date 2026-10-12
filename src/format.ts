@@ -330,27 +330,13 @@ export function skeletonPrefix(skeletons: readonly SkeletonRecord[]): string {
  * here, kept so the next save removes its line. One only the other side holds was added there. One
  * only this side holds was added here, unless `base` held it and this side has not changed it since,
  * when it was deleted there.
- *
- * An element in `inHand`, the text being typed or the shape being drawn here, is kept as it is here
- * whatever the other side holds. Excalidraw edits it in place, so taking it away or changing it would
- * lose what is being typed: an older copy of the drawing arriving late (the echo of an earlier save,
- * written before the text was) would otherwise read as the text deleted elsewhere.
  */
-export function mergeDrawing(
-    base: readonly ElementRecord[],
-    local: readonly ElementRecord[],
-    remote: readonly ElementRecord[],
-    inHand: ReadonlySet<string> = new Set(),
-): ElementRecord[] {
+export function mergeDrawing(base: readonly ElementRecord[], local: readonly ElementRecord[], remote: readonly ElementRecord[]): ElementRecord[] {
     const baseById = new Map(base.map((element) => [element.id, element]))
     const remoteById = new Map(remote.map((element) => [element.id, element]))
     const out = new Map<string, ElementRecord>()
     for (const element of remote) out.set(element.id, element)
     for (const element of local) {
-        if (inHand.has(element.id)) {
-            out.set(element.id, element)
-            continue
-        }
         const theirs = remoteById.get(element.id)
         if (theirs) {
             if (later(element, theirs)) out.set(element.id, element)

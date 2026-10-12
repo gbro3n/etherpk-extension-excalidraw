@@ -196,16 +196,6 @@ describe('merging a drawing changed elsewhere', () => {
         const merged = mergeDrawing(base, [el('1', 1), el('2', 4), el('3', 1)], [el('3', 1)])
         expect(merged.map((e) => e.id)).toEqual(['2', '3'])
     })
-
-    it('keeps the element being edited here as it is here, whatever the other side holds', () => {
-        // Text being typed, already saved once (in the base at this version): an older copy of the
-        // drawing without it must not take it away, and a later one must not change it under the caret.
-        const typing = el('4', 2, { type: 'text', text: 'Bean' })
-        const merged = mergeDrawing([...base, typing], [...base, typing], base, new Set(['4']))
-        expect(merged.find((e) => e.id === '4')).toEqual(typing)
-        const overwritten = mergeDrawing([...base, typing], [...base, typing], [...base, el('4', 9, { type: 'text', text: 'Pea' })], new Set(['4']))
-        expect(overwritten.find((e) => e.id === '4')).toEqual(typing)
-    })
 })
 
 describe('what a picture of a drawing says', () => {

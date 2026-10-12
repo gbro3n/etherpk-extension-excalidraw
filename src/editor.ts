@@ -43,7 +43,11 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
     let body: readonly string[] = context.body
     const read = readDrawing(body)
     let header: DrawingHeader = read.header ?? { type: 'excalidraw.drawing', version: 1, id: newDrawingId(), background: '#ffffff' }
-    type Api = { getSceneElementsIncludingDeleted(): readonly unknown[]; getAppState(): { viewBackgroundColor: string }; updateScene(scene: unknown): void }
+    type Api = {
+        getSceneElementsIncludingDeleted(): readonly unknown[]
+        getAppState(): { viewBackgroundColor: string; editingTextElement?: { id: string } | null; newElement?: { id: string } | null }
+        updateScene(scene: unknown): void
+    }
     let api: Api | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     /** A version stamp of what is on screen when it was last written, so an unchanged scene is not compared line by line. */
@@ -126,7 +130,10 @@ export function mountLiveEditor(kit: ExcalidrawKit, element: HTMLElement, initia
             // A change from elsewhere: merged with what is on screen, against the body as last read.
             const remote = readDrawing(next.body)
             const local = api.getSceneElementsIncludingDeleted() as unknown as ElementRecord[]
-            const merged = mergeDrawing(readDrawing(body).elements, local, remote.elements)
+            // The text being typed and the shape being drawn stay as they are here (mergeDrawing).
+            const state = api.getAppState()
+            const inHand = new Set([state.editingTextElement?.id, state.newElement?.id].filter((id): id is string => typeof id === 'string'))
+            const merged = mergeDrawing(readDrawing(body).elements, local, remote.elements, inHand)
             body = next.body
             if (remote.header) header = remote.header
             api.updateScene({ elements: restoreScene(kit, merged), captureUpdate: CaptureUpdateAction.NEVER })

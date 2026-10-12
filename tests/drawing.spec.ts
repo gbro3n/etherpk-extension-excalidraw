@@ -172,6 +172,146 @@ test.describe('a drawing in a document', () => {
         await expect.poll(() => getDoc(page)).toBe(['Garden', drawing('k1', rectangle, label), 'xAfter'].join('\n'))
     })
 
+    test('text typed across a save keeps its editing box, and is saved whole', async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        const editor = page.getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+
+        // The text tool, on empty canvas beside the rectangle.
+        await page.keyboard.press('t')
+        await page.mouse.click(canvas.x + canvas.width / 2 + 180, canvas.y + canvas.height / 2)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Bean')
+        // A save lands while the text is still being typed: the drawing writes it, and the
+        // document's change comes back to the widget.
+        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Bean"/)
+        await page.keyboard.type('stalk')
+
+        await expect(box).toHaveValue('Beanstalk')
+        // The box grows with its text rather than closing to a sliver.
+        expect((await box.boundingBox())!.width).toBeGreaterThan(40)
+        await page.keyboard.press('Escape')
+        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Beanstalk"/)
+    })
+
+    test('text typed inside a shape is drawn in the shape, and saved bound to it', async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        const editor = page.getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+
+        // The text tool, pressed at the middle of the drawing: inside the rectangle.
+        await page.keyboard.press('t')
+        await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Beans')
+        await expect(box).toHaveValue('Beans')
+        expect((await box.boundingBox())!.width).toBeGreaterThan(30)
+        await page.keyboard.press('Escape')
+        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Beans"[^\n]*"containerId":"r1"|"containerId":"r1"[^\n]*"text":"Beans"/)
+    })
+
+    test("text typed on an arrow is the arrow's label, drawn on it and saved", async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        const editor = page.getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+
+        // A long arrow across the upper part of the drawing: clear of the rectangle in the middle,
+        // the toolbar above it and the controls in the corners.
+        const from = { x: canvas.x + canvas.width * 0.3, y: canvas.y + canvas.height * 0.22 }
+        const to = { x: canvas.x + canvas.width * 0.85, y: canvas.y + canvas.height * 0.32 }
+        await page.keyboard.press('a')
+        await page.mouse.move(from.x, from.y)
+        await page.mouse.down()
+        await page.mouse.move(to.x, to.y, { steps: 8 })
+        await page.mouse.up()
+        await page.keyboard.press('Escape')
+        await expect.poll(async () => (await drawingLines(page)).some((line) => line.includes('"type":"arrow"')), { timeout: 10_000 }).toBe(true)
+
+        // The text tool, pressed at the arrow's middle: its label.
+        await page.keyboard.press('t')
+        await page.mouse.click((from.x + to.x) / 2, (from.y + to.y) / 2)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Beans')
+        await expect(box).toHaveValue('Beans')
+        expect((await box.boundingBox())!.width).toBeGreaterThan(30)
+        await page.keyboard.press('Escape')
+        await expect.poll(async () => (await drawingLines(page)).some((line) => line.includes('"text":"Beans"') && /"containerId":"[^"]+"/.test(line)), { timeout: 10_000 }).toBe(true)
+        // Drawn with a width, so it shows.
+        const label = (await drawingLines(page)).find((line) => line.includes('"text":"Beans"'))!
+        expect((JSON.parse(label) as { width: number }).width).toBeGreaterThan(20)
+    })
+
+    test('text typed on a line is drawn and saved', async ({ page }) => {
+        await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
+        await page.getByTestId('excalidraw-picture').click()
+        const editor = page.getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+
+        // A long line across the upper part of the drawing, clear of the rectangle and the controls.
+        const from = { x: canvas.x + canvas.width * 0.3, y: canvas.y + canvas.height * 0.22 }
+        const to = { x: canvas.x + canvas.width * 0.85, y: canvas.y + canvas.height * 0.32 }
+        await page.keyboard.press('l')
+        await page.mouse.move(from.x, from.y)
+        await page.mouse.down()
+        await page.mouse.move(to.x, to.y, { steps: 8 })
+        await page.mouse.up()
+        await page.keyboard.press('Escape')
+        await expect.poll(async () => (await drawingLines(page)).some((line) => line.includes('"type":"line"')), { timeout: 10_000 }).toBe(true)
+
+        // The text tool, pressed at the line's middle.
+        await page.keyboard.press('t')
+        await page.mouse.click((from.x + to.x) / 2, (from.y + to.y) / 2)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Beans')
+        await expect(box).toHaveValue('Beans')
+        expect((await box.boundingBox())!.width).toBeGreaterThan(30)
+        await page.keyboard.press('Escape')
+        await expect.poll(async () => (await drawingLines(page)).some((line) => line.includes('"text":"Beans"')), { timeout: 10_000 }).toBe(true)
+        const label = (await drawingLines(page)).find((line) => line.includes('"text":"Beans"'))!
+        expect((JSON.parse(label) as { width: number }).width).toBeGreaterThan(20)
+    })
+
+    test('text being typed survives an older copy of the drawing arriving, and is saved whole', async ({ page }) => {
+        const before = ['Garden', drawing('k1', rectangle), 'After'].join('\n')
+        await setDoc(page, before)
+        await page.getByTestId('excalidraw-picture').click()
+        const editor = page.getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+
+        await page.keyboard.press('t')
+        await page.mouse.click(canvas.x + canvas.width / 2 + 180, canvas.y + canvas.height / 2)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Bean')
+        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Bean"/)
+        // The drawing as it was before that save, arriving late: an echo of an older write.
+        await page.evaluate((value) => (window as unknown as { __setDoc(text: string): void }).__setDoc(value), before)
+        await expect(box).toBeFocused()
+        await page.keyboard.type('stalk')
+
+        await expect(box).toHaveValue('Beanstalk')
+        expect((await box.boundingBox())!.width).toBeGreaterThan(40)
+        await page.keyboard.press('Escape')
+        await expect.poll(() => getDoc(page), { timeout: 10_000 }).toMatch(/"text":"Beanstalk"/)
+    })
+
     test('a press on the picture makes it live, and a press outside puts it back', async ({ page }) => {
         await setDoc(page, ['Garden', drawing('k1', rectangle), 'After'].join('\n'))
         await page.getByTestId('excalidraw-picture').click()
@@ -342,6 +482,87 @@ test.describe('a drawing in a graph', () => {
                 return text.split('\n').filter((line) => line.includes('"type":"rectangle"')).length
             })
         await expect.poll(rectanglesOnDisk, { timeout: 15_000 }).toBe(2)
+    })
+
+    test('in the dark theme at full width, what is drawn in the window shows at once', async ({ page }) => {
+        await page.setViewportSize({ width: 1600, height: 900 })
+        await page.emulateMedia({ colorScheme: 'dark' })
+        await openGraph(page, 'drawing-dark-window', { Plans: ['Intro', drawing('k9'), 'After', ''].join('\n') }, 'Plans')
+        const inDocument = page.locator('[data-doc-target="Plans"]')
+        await inDocument.getByTestId('excalidraw-picture').click()
+        await inDocument.getByTestId('excalidraw-full-window').click()
+        const editor = page.getByTestId('fence-window').getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+        const at = { x: canvas.x + canvas.width * 0.4, y: canvas.y + canvas.height * 0.4 }
+        await page.keyboard.press('r')
+        await page.mouse.move(at.x, at.y)
+        await page.mouse.down()
+        await page.mouse.move(at.x + 200, at.y + 120, { steps: 6 })
+        await page.mouse.up()
+        await page.keyboard.press('Escape')
+        // Off the rectangle, so no selection outline is drawn over it, and then nothing else moves:
+        // the page has no other reason to repaint.
+        await page.mouse.click(canvas.x + 20, canvas.y + canvas.height - 20)
+        const fileText = () =>
+            page.evaluate(async () => {
+                const root = await navigator.storage.getDirectory()
+                const pages = await (await root.getDirectoryHandle('graph-drawing-dark-window')).getDirectoryHandle('pages')
+                return (await (await pages.getFileHandle('Plans.md')).getFile()).text()
+            })
+        await expect.poll(fileText, { timeout: 15_000 }).toMatch(/"type":"rectangle"/)
+
+        // What the screen shows, not what the canvas holds: light pixels in a box around the
+        // rectangle, whose stroke is light on the dark canvas, with nothing else in the box.
+        const box = { x: Math.round(at.x - 40), y: Math.round(at.y - 40), width: 280, height: 200 }
+        const shot = (await page.screenshot({ clip: box })).toString('base64')
+        const lit = await page.evaluate(async (shot) => {
+            const image = new Image()
+            image.src = `data:image/png;base64,${shot}`
+            await image.decode()
+            const surface = document.createElement('canvas')
+            surface.width = image.width
+            surface.height = image.height
+            const ctx = surface.getContext('2d')!
+            ctx.drawImage(image, 0, 0)
+            const { data } = ctx.getImageData(0, 0, image.width, image.height)
+            let count = 0
+            for (let i = 0; i < data.length; i += 4) if (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2] > 150) count++
+            return count
+        }, shot)
+        expect(lit).toBeGreaterThan(200)
+    })
+
+    test('text typed in its tab across a save keeps its editing box, and reaches the file whole', async ({ page }) => {
+        await openGraph(page, 'drawing-tab-text', { Plans: PLANS, 'Garden Site': SITE }, 'Plans')
+        const inDocument = page.locator('[data-doc-target="Plans"]')
+        await inDocument.getByTestId('excalidraw-picture').click()
+        await inDocument.getByTestId('excalidraw-open-tab').click()
+        const editor = page.getByTestId('fence-view').getByTestId('excalidraw-editor')
+        await expect(editor.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => editor.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+        const canvas = (await editor.boundingBox())!
+        const fileText = () =>
+            page.evaluate(async () => {
+                const root = await navigator.storage.getDirectory()
+                const pages = await (await root.getDirectoryHandle('graph-drawing-tab-text')).getDirectoryHandle('pages')
+                return (await (await pages.getFileHandle('Plans.md')).getFile()).text()
+            })
+
+        await page.keyboard.press('t')
+        await page.mouse.click(canvas.x + canvas.width - 120, canvas.y + 80)
+        const box = editor.locator('textarea.excalidraw-wysiwyg')
+        await expect(box).toBeFocused()
+        await page.keyboard.type('Bean')
+        // A save reaches the file while the text is still being typed, and comes back to the tab.
+        await expect.poll(fileText, { timeout: 15_000 }).toMatch(/"text":"Bean"/)
+        await page.keyboard.type('stalk')
+
+        await expect(box).toHaveValue('Beanstalk')
+        expect((await box.boundingBox())!.width).toBeGreaterThan(40)
+        await page.keyboard.press('Escape')
+        await expect.poll(fileText, { timeout: 15_000 }).toMatch(/"text":"Beanstalk"/)
     })
 
     test('on a phone it is a picture, a press shows it over the window to look at, and /drawing is not offered', async ({ page }) => {

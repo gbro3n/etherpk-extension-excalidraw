@@ -36,9 +36,12 @@ export function drawingSvg(kit: ExcalidrawKit, drawing: Pick<Drawing, 'header' |
     return picture.then((svg) => svg.cloneNode(true) as SVGSVGElement)
 }
 
-/** The picture as a file for a published site: its bytes, size and type. */
-export async function drawingFile(kit: ExcalidrawKit, drawing: Pick<Drawing, 'header' | 'elements'>): Promise<{ bytes: Uint8Array; width: number; height: number }> {
-    const svg = await drawingSvg(kit, drawing, { dark: false })
+/**
+ * The picture as a file: its bytes, size and type. Light for a published site, and in the app's theme
+ * for a quote of the drawing, such as a reference in the Backlinks panel.
+ */
+export async function drawingFile(kit: ExcalidrawKit, drawing: Pick<Drawing, 'header' | 'elements'>, options: { dark: boolean } = { dark: false }): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+    const svg = await drawingSvg(kit, drawing, options)
     const width = Math.round(Number.parseFloat(svg.getAttribute('width') ?? '0')) || 640
     const height = Math.round(Number.parseFloat(svg.getAttribute('height') ?? '0')) || 360
     if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')

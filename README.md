@@ -28,6 +28,8 @@ the Excalidraw team.
   Drawing is for a desktop.
 - **Published sites.** On a site you publish from EtherPK, a drawing is a picture of it, an SVG file
   with its fonts inside. The drawing's data is never on the site.
+- **Backlinks.** Where a block that links to a page holds a drawing, the page's backlinks show the
+  drawing as a picture in your light or dark theme. Click it to open the document it is in.
 
 What Excalidraw can do that reaches other services is switched off: its library browser, sharing,
 web embeds, its AI features and its help and social links. The image tool is off too, since images
@@ -145,7 +147,8 @@ Excalidraw release that moves it fails the build rather than shipping without th
 The extension is written against
 [`@appsoftwareltd/etherpk-extension-api`](https://www.npmjs.com/package/@appsoftwareltd/etherpk-extension-api).
 It uses `context.editor.registerFence` (the widget, the tab and full window, pasting, the published
-picture), `context.editor.insertBlock`, `context.layout.isDesktop` and `context.notify`.
+picture and the picture in backlinks), `context.editor.insertBlock`, `context.layout.isDesktop` and
+`context.notify`.
 
 ## Licence
 

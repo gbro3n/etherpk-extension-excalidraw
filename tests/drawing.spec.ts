@@ -589,6 +589,31 @@ test.describe('a drawing in a graph', () => {
         await expect(page.getByRole('option', { name: /^Drawing/ })).toHaveCount(0)
     })
 
+    test("is quoted in a document's backlinks as its picture, in the app's theme, and never as its lines", async ({ page }) => {
+        const indented = (text: string) =>
+            text
+                .split('\n')
+                .map((line) => `  ${line}`)
+                .join('\n')
+        const beds = ['- [[Kitchen]] the beds we planned', indented(drawing('q1', rectangle, label)), ''].join('\n')
+        await openGraph(page, 'drawing-backlinks', { Kitchen: 'The kitchen garden.\n', Beds: beds }, 'Kitchen')
+        const backlinks = page.locator('[data-doc-target="Kitchen"]').getByTestId('document-backlinks')
+        const picture = backlinks.getByTestId('reference-fence-picture')
+        await expect(picture).toBeVisible({ timeout: 30_000 })
+        await expect(picture).toHaveAttribute('alt', 'Drawing: Beans')
+        await expect(backlinks).not.toContainText('"type":"rectangle"')
+        await expect(backlinks).not.toContainText('excalidraw.drawing')
+
+        // Drawn again for the other theme: a new picture, and a different file.
+        const svg = () => picture.evaluate(async (image: HTMLImageElement) => (await fetch(image.src)).text())
+        const before = { src: await picture.getAttribute('src'), svg: await svg() }
+        expect(before.svg).toContain('<svg')
+        const next = (await page.locator('html').getAttribute('data-theme')) === 'dark' ? 'Light' : 'Dark'
+        await page.locator(`[data-testid="theme-toggle"] button[aria-label="${next}"]`).first().click()
+        await expect.poll(() => picture.getAttribute('src'), { timeout: 30_000 }).not.toBe(before.src)
+        expect(await svg()).not.toBe(before.svg)
+    })
+
     test('is published as a picture made by Excalidraw, with its fonts in it, and never as its lines', async ({ page }) => {
         await openGraph(page, 'drawing-publish', { Plans: PLANS, 'Garden Site': SITE }, 'Plans')
         await page.getByTestId('ws-graph-settings').click()

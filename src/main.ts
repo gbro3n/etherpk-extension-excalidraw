@@ -12,7 +12,9 @@
  * - `/drawing`, on a desktop, which puts a new drawing at the caret (`context.editor.insertBlock`);
  * - pasted on a line of its own, an excalidraw.com share link becomes a drawing to import, and shapes
  *   copied on excalidraw.com become a drawing of them (the fence's `fromPaste`, `share-link.ts`);
- * - on a published site, a picture of the drawing (the fence's `publish`).
+ * - on a published site, a picture of the drawing (the fence's `publish`);
+ * - where a reference quotes the drawing, in the Backlinks panel and beneath a document, the same
+ *   picture in the app's theme (the fence's `quote`).
  *
  * It mounts in the page rather than in a shadow root (`"isolation": "page"` in package.json), since
  * Excalidraw's copy and paste and its dialogs do not work inside one. Its stylesheet is scoped under
@@ -21,7 +23,7 @@
 import '@excalidraw/excalidraw/index.css'
 import './styles.css'
 
-import type { ExtensionContext } from '@appsoftwareltd/etherpk-extension-api'
+import type { ExtensionContext, PublishedFence } from '@appsoftwareltd/etherpk-extension-api'
 
 import { DRAWING_FENCE, drawingAlt, identifyDrawing, newDrawingText, readDrawing } from './format'
 import { loadExcalidraw } from './load'
@@ -32,6 +34,21 @@ import { createDrawingWidget, imagesLeftOut } from './widget'
 const ASSET_BASE = new URL('./', import.meta.url).href
 
 export const INSERT_COMMAND = 'excalidraw.insert'
+
+/**
+ * A drawing as a picture file, for a published site (light) and for a quote of it (in the app's
+ * theme), or null for a drawing with nothing in it.
+ */
+async function drawingPicture(body: readonly string[], options: { dark: boolean }): Promise<PublishedFence | null> {
+    const drawing = readDrawing(body)
+    if (drawing.elements.length === 0 && drawing.skeletons.length === 0) return null
+    const [{ drawingFile }, { convertSkeletons }] = await Promise.all([import('./picture'), import('./scene')])
+    const kit = await loadExcalidraw(ASSET_BASE)
+    // Shapes written by hand are drawn too, converted as the document would convert them.
+    const elements = [...drawing.elements, ...convertSkeletons(kit, drawing.skeletons).elements]
+    const file = await drawingFile(kit, { header: drawing.header, elements }, options)
+    return { kind: 'picture', type: 'image/svg+xml', bytes: file.bytes, width: file.width, height: file.height, alt: drawingAlt(elements) }
+}
 
 export function activate(context: ExtensionContext): void {
     const widget = createDrawingWidget({ assetBase: ASSET_BASE, isDesktop: () => context.layout.isDesktop(), notify: (message) => context.notify(message) })
@@ -45,16 +62,8 @@ export function activate(context: ExtensionContext): void {
             if (pasted.skippedImages > 0) context.notify(imagesLeftOut(pasted.skippedImages, 'pasted'))
             return pasted.lines
         },
-        async publish(fence) {
-            const drawing = readDrawing(fence.body)
-            if (drawing.elements.length === 0 && drawing.skeletons.length === 0) return null
-            const [{ drawingFile }, { convertSkeletons }] = await Promise.all([import('./picture'), import('./scene')])
-            const kit = await loadExcalidraw(ASSET_BASE)
-            // Shapes written by hand are drawn too, converted as the document would convert them.
-            const elements = [...drawing.elements, ...convertSkeletons(kit, drawing.skeletons).elements]
-            const file = await drawingFile(kit, { header: drawing.header, elements })
-            return { kind: 'picture', type: 'image/svg+xml', bytes: file.bytes, width: file.width, height: file.height, alt: drawingAlt(elements) }
-        },
+        publish: (fence) => drawingPicture(fence.body, { dark: false }),
+        quote: (fence) => drawingPicture(fence.body, { dark: fence.dark }),
     })
 
     context.commands.register(INSERT_COMMAND, () => {

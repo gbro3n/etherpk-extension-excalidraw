@@ -1,6 +1,6 @@
 {
     "name": "@gbro3n/etherpk-extension-excalidraw",
-    "version": "0.1.4",
+    "version": "0.2.0",
     "description": "Excalidraw drawings in EtherPK documents, kept as data in the document: edited in place, in a tab or filling the window, shown as a picture on phones and published sites.",
     "license": "MIT",
     "type": "module",
@@ -17,7 +17,7 @@
         "id": "excalidraw",
         "displayName": "Excalidraw",
         "publisher": "gbro3n",
-        "minClientVersion": "0.10.0",
+        "minClientVersion": "0.14.0",
         "main": "./dist/main.js",
         "styles": [
             "./dist/main.css"

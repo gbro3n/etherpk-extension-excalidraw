@@ -89,7 +89,7 @@ to show its text. Words written in a drawing aren't found by EtherPK's search ye
 ## Installing
 
 It is listed in the EtherPK Extension Directory. Install it in EtherPK from Settings and
-Extensions, then Extensions. It needs EtherPK 0.10.0 or later. To try a change before it is
+Extensions, then Extensions. It needs EtherPK 0.14.0 or later. To try a change before it is
 released, install it from a local directory, or side-load it in a development copy of the EtherPK
 Client (both below).
 
@@ -148,7 +148,9 @@ The extension is written against
 [`@appsoftwareltd/etherpk-extension-api`](https://www.npmjs.com/package/@appsoftwareltd/etherpk-extension-api).
 It uses `context.editor.registerFence` (the widget, the tab and full window, pasting, the published
 picture and the picture in backlinks), `context.editor.insertBlock`, `context.layout.isDesktop` and
-`context.notify`.
+`context.notify`. Its buttons, menu and link use the Client's control classes (`gk-button`,
+`gk-icon-button`, `gk-menu`, `gk-link`), so they look like EtherPK's own in the light and dark
+themes.
 
 ## Licence
 

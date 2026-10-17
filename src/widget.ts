@@ -17,7 +17,8 @@
  *
  * Delete removes the drawing as one change and says that Mod+Z brings it back, rather than asking
  * first. The picture is Excalidraw's own SVG export (`picture.ts`). Everything is built with the DOM
- * and React, never written as HTML.
+ * and React, never written as HTML. The buttons, the menu and the link carry the Client's control
+ * classes (`gk-button`, `gk-icon-button`, `gk-menu`, `gk-link`), so they are drawn as EtherPK's own.
  */
 import type { FenceContext, FenceInfo, FenceWidget, MountedFence } from '@appsoftwareltd/etherpk-extension-api'
 
@@ -113,24 +114,25 @@ function moreIcon(): SVGSVGElement {
 /**
  * A menu button and its menu, with the keyboard a menu has: arrows move between the items, Escape
  * closes it and gives the button back the focus, Tab closes it. Returns the element and a way to close it.
+ * An item that removes something (`danger`) is drawn in the danger colour, as the toolbar's Delete is.
  */
-function actionMenu(label: string, items: readonly { text: string; testId: string; run(): void }[]): { root: HTMLElement; close(): void; contains(node: Node): boolean } {
+function actionMenu(label: string, items: readonly { text: string; testId: string; danger?: boolean; run(): void }[]): { root: HTMLElement; close(): void; contains(node: Node): boolean } {
     const root = element('div', 'excalidraw-drawing-menu')
-    const trigger = element('button', 'excalidraw-drawing-menu-button')
+    const trigger = element('button', 'gk-icon-button gk-button--raised excalidraw-drawing-menu-button')
     trigger.type = 'button'
     trigger.dataset.testid = 'excalidraw-menu'
     trigger.setAttribute('aria-label', label)
     trigger.setAttribute('aria-haspopup', 'menu')
     trigger.setAttribute('aria-expanded', 'false')
     trigger.append(moreIcon())
-    const list = element('div', 'excalidraw-drawing-menu-list')
+    const list = element('div', 'gk-menu excalidraw-drawing-menu-list')
     list.id = `excalidraw-drawing-menu-${++ids}`
     list.setAttribute('role', 'menu')
     list.setAttribute('aria-label', label)
     list.hidden = true
     trigger.setAttribute('aria-controls', list.id)
     const entries = items.map((item) => {
-        const entry = button('excalidraw-drawing-menu-item', item.text, () => {
+        const entry = button(item.danger ? 'gk-menu-item gk-menu-item--danger' : 'gk-menu-item', item.text, () => {
             close(false)
             item.run()
         }, item.testId)
@@ -206,7 +208,7 @@ export function createDrawingWidget(services: DrawingServices): FenceWidget {
                 if (!context.writable || fills()) return
                 menu = actionMenu('Drawing actions', [
                     { text: 'Edit as text', testId: 'excalidraw-edit-text', run: () => context.editAsText() },
-                    { text: 'Delete', testId: 'excalidraw-delete', run: deleteDrawing },
+                    { text: 'Delete', testId: 'excalidraw-delete', danger: true, run: deleteDrawing },
                 ])
                 root.append(menu.root)
             }
@@ -267,7 +269,7 @@ export function createDrawingWidget(services: DrawingServices): FenceWidget {
                 const status = element('p', 'excalidraw-drawing-import-note')
                 status.setAttribute('role', 'status')
                 const actions = element('div', 'excalidraw-drawing-import-actions')
-                const open = element('a', 'excalidraw-drawing-import-link', 'Open on excalidraw.com')
+                const open = element('a', 'gk-link', 'Open on excalidraw.com')
                 open.href = found.link
                 open.target = '_blank'
                 open.rel = 'noopener noreferrer'
@@ -275,7 +277,7 @@ export function createDrawingWidget(services: DrawingServices): FenceWidget {
                     status.textContent = 'Pressing import fetches the drawing from excalidraw.com and writes it into this document.'
                     const label = 'Import this drawing from excalidraw.com'
                     let importing = false
-                    const run = button('excalidraw-drawing-action excalidraw-drawing-action--primary', label, () => {
+                    const run = button('gk-button gk-button--primary', label, () => {
                         if (importing) return
                         importing = true
                         run.setAttribute('aria-busy', 'true')
@@ -362,25 +364,25 @@ export function createDrawingWidget(services: DrawingServices): FenceWidget {
                     const changes = element('div', 'excalidraw-drawing-toolbar-group')
                     changes.append(
                         // Saved and back to the picture first, so the text shown is what was drawn.
-                        button('excalidraw-drawing-action', 'Edit as text', () => {
+                        button('gk-button', 'Edit as text', () => {
                             stopEditing()
                             context.editAsText()
                         }, 'excalidraw-edit-text'),
-                        button('excalidraw-drawing-action excalidraw-drawing-action--danger', 'Delete', () => {
+                        button('gk-button gk-button--danger', 'Delete', () => {
                             // Saved first, so Mod+Z brings back the drawing as it was last drawn.
                             stopEditing()
                             deleteDrawing()
                         }, 'excalidraw-delete'),
                     )
                     toolbar.append(
-                        button('excalidraw-drawing-action', 'Done', () => stopEditing(), 'excalidraw-done'),
+                        button('gk-button', 'Done', () => stopEditing(), 'excalidraw-done'),
                         // The drawing goes on in the tab or the window, so here it goes back to its
                         // picture, saved: one live editor for a drawing, never two side by side.
-                        button('excalidraw-drawing-action', 'Full window', () => {
+                        button('gk-button', 'Full window', () => {
                             stopEditing()
                             context.openWindow()
                         }, 'excalidraw-full-window'),
-                        button('excalidraw-drawing-action', 'Open in tab', () => {
+                        button('gk-button', 'Open in tab', () => {
                             stopEditing()
                             context.openInTab()
                         }, 'excalidraw-open-tab'),

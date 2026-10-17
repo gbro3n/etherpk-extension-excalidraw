@@ -3,6 +3,13 @@
  * elements with a class starting with `excalidraw`, or inside one, so every class here starts with it.
  * Colours come from the Client's --gk-* tokens. Text is at least 14px and recedes by colour, never by
  * opacity.
+ *
+ * The buttons, the menu and the link are EtherPK's own controls (`gk-button`, `gk-icon-button`,
+ * `gk-menu`, `gk-menu-item`, `gk-link`), which the Client's page stylesheet defines, so they look
+ * like the Client's in both themes. This file holds only where they sit and what the menu's button
+ * needs over a picture. It defines no `gk-*` rule, since the Client accepts none from an extension
+ * in the page. Its rules sit in no cascade layer, so they win over the controls' (which are in the
+ * `components` layer): a rule here that sets what a control sets changes that control.
  */
 
 .excalidraw-drawing {
@@ -84,43 +91,12 @@
     padding: 0 0 0.375rem;
 }
 
-.excalidraw-drawing-action {
-    border: 1px solid var(--gk-border-strong, #9ca3af);
-    border-radius: 0.375rem;
-    padding: 0.25rem 0.75rem;
-    background: transparent;
-    color: var(--gk-text-default, inherit);
-    font: inherit;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-}
-
-.excalidraw-drawing-action:hover {
-    background: var(--gk-surface-1, #f3f4f6);
-}
-
-.excalidraw-drawing-action:focus-visible {
-    outline: 2px solid var(--gk-accent, #2563eb);
-    outline-offset: 2px;
-}
-
-.excalidraw-drawing-action--primary {
-    border-color: var(--gk-accent, #2563eb);
-    background: var(--gk-accent, #2563eb);
-    color: var(--gk-surface-0, #fff);
-}
-
-.excalidraw-drawing-action--primary:hover {
-    background: var(--gk-accent-hover, #1d4ed8);
-}
-
-.excalidraw-drawing-action--primary[aria-busy='true'] {
-    cursor: progress;
-}
-
-.excalidraw-drawing-action--danger {
-    color: var(--gk-text-danger, #b91c1c);
+/* On a touch screen the Client's buttons are 44px tall, the toolbar's whole height, so the space
+   under them goes rather than the buttons spilling onto the drawing. */
+@media (pointer: coarse) {
+    .excalidraw-drawing-toolbar {
+        padding-bottom: 0;
+    }
 }
 
 /* Edit as text and Delete, apart from the buttons that move the drawing. */
@@ -155,30 +131,14 @@
     }
 }
 
-.excalidraw-drawing-menu-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
-    border: 1px solid var(--gk-border-soft, #e5e7eb);
-    border-radius: 0.375rem;
-    background: var(--gk-surface-0, #fff);
-    color: var(--gk-text-muted, #6b7280);
-    cursor: pointer;
-}
-
-.excalidraw-drawing-menu-button:hover,
+/*
+ * The menu's button is the Client's raised icon button (`gk-icon-button gk-button--raised`): over a
+ * picture it needs a solid face, an edge and a shadow, or it would be lost against the drawing.
+ */
+/* While its menu is open, the button stays lit as it is on hover (`gk-button--raised`). */
 .excalidraw-drawing-menu-button[aria-expanded='true'] {
-    color: var(--gk-text-default, inherit);
-    background: var(--gk-surface-1, #f3f4f6);
-}
-
-.excalidraw-drawing-menu-button:focus-visible,
-.excalidraw-drawing-menu-item:focus-visible {
-    outline: 2px solid var(--gk-accent, #2563eb);
-    outline-offset: 2px;
+    background: linear-gradient(var(--gk-menu-hover), var(--gk-menu-hover)), var(--gk-surface-0);
+    color: var(--gk-text-strong);
 }
 
 .excalidraw-drawing-menu-icon {
@@ -187,41 +147,12 @@
     fill: currentColor;
 }
 
-/* Beside its button rather than below it: the Client clips a drawing to its height, and the smallest
-   picture is just tall enough for the menu this way. */
+/* The Client's menu, beside its button rather than below it: the Client clips a drawing to its
+   height, and the smallest picture is just tall enough for the menu this way. */
 .excalidraw-drawing-menu-list {
     position: absolute;
     top: 0;
     right: calc(100% + 0.25rem);
-    display: flex;
-    flex-direction: column;
-    min-width: 9rem;
-    padding: 0.25rem;
-    border: 1px solid var(--gk-border-soft, #e5e7eb);
-    border-radius: 0.5rem;
-    background: var(--gk-surface-0, #fff);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-}
-
-.excalidraw-drawing-menu-list[hidden] {
-    display: none;
-}
-
-.excalidraw-drawing-menu-item {
-    padding: 0.375rem 0.625rem;
-    border: 0;
-    border-radius: 0.25rem;
-    background: transparent;
-    color: var(--gk-text-default, inherit);
-    font: inherit;
-    font-size: 0.875rem;
-    text-align: left;
-    cursor: pointer;
-}
-
-.excalidraw-drawing-menu-item:hover,
-.excalidraw-drawing-menu-item:focus {
-    background: var(--gk-surface-1, #f3f4f6);
 }
 
 /* A share link from excalidraw.com, not yet imported. */
@@ -255,18 +186,13 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
-}
-
-.excalidraw-drawing-import-link {
+    /* The link takes its text size from here, at 14px beside the button, not the document's size. */
     font-size: 0.875rem;
-    color: var(--gk-accent, #2563eb);
-    text-decoration: underline;
-    text-underline-offset: 2px;
 }
 
-.excalidraw-drawing-import-link:focus-visible {
-    outline: 2px solid var(--gk-accent, #2563eb);
-    outline-offset: 2px;
+/* The import button, while it waits on excalidraw.com. */
+.excalidraw-drawing-import-actions > [aria-busy='true'] {
+    cursor: progress;
 }
 
 @media (prefers-reduced-motion: reduce) {
